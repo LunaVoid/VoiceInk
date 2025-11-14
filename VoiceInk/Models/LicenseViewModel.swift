@@ -75,12 +75,12 @@ class LicenseViewModel: ObservableObject {
         case .licensed, .trial:
             return true
         case .trialExpired:
-            return false
+            return true
         }
     }
     
     func openPurchaseLink() {
-        if let url = URL(string: "https://tryvoiceink.com/buy") {
+        if let url = URL(string: "") {
             NSWorkspace.shared.open(url)
         }
     }

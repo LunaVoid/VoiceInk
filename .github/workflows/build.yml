@@ -1,218 +1,62 @@
 name: Build VoiceInk
 
 on:
-  workflow_dispatch:  # Allows manual triggering
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-15  # macOS 15 comes with Xcode 16
-    timeout-minutes: 60
-    
-    env:
-      # Set deployment target to macOS 14.5 for maximum compatibility
-      MACOSX_DEPLOYMENT_TARGET: 14.5
-      # Use latest SDK but target older macOS version
-      SDKROOT: macosx
-    
+    runs-on: macos-15  # Has Xcode 16
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
     
-    - name: Verify Xcode version
+    - name: Set up Xcode 16
       run: |
-        # Explicitly select Xcode 16
         sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
         xcodebuild -version
-        echo "✅ Xcode version: $(xcodebuild -version | head -1)"
-        echo "✅ Deployment target: $MACOSX_DEPLOYMENT_TARGET"
     
-    - name: Install required tools
+    - name: Install dependencies
       run: |
-        # Ensure Homebrew is available
-        if ! command -v brew &> /dev/null; then
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
-          eval "$(/opt/homebrew/bin/brew shellenv)"
-        fi
-        
-        # Install required dependencies
         brew update
-        brew install cmake coreutils
-        
-        # Verify all required tools are installed
-        echo "✅ Git version: $(git --version)"
-        echo "✅ Xcodebuild version: $(xcodebuild -version | head -1)"
-        echo "✅ Swift version: $(swift --version | head -1)"
-        echo "✅ CMake version: $(cmake --version | head -1)"
+        brew install cmake
     
-    - name: Health check prerequisites
+    - name: Build whisper.xcframework manually
       run: |
-        echo "🔧 Running health check..."
-        make check || echo "⚠️ Health check warnings (continuing anyway)"
-        echo "✅ Health check completed"
+        # Create the exact directory structure the Xcode project expects
+        mkdir -p VoiceInk-Dependencies/whisper.cpp/build-apple
+        
+        # Clone and build whisper.cpp directly in the right location
+        git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+        cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+        ./build-xcframework.sh
+        
+        # Verify the framework exists where Xcode expects it
+        ls -la build-apple/whisper.xcframework
+        cp -R build-apple/whisper.xcframework ../../build-apple/
     
-    - name: Build whisper.xcframework with macOS 14.5 compatibility
+    - name: Build VoiceInk
       run: |
-        echo "🏗️ Building whisper.xcframework with macOS 14.5 deployment target..."
-        # Clean previous builds if any
-        make clean || true
-        
-        # Build whisper framework with proper deployment target
-        MACOSX_DEPLOYMENT_TARGET=14.5 \
-        SDKROOT=macosx \
-        make whisper
-        
-        echo "✅ Whisper framework built successfully"
-    
-    - name: Build VoiceInk application
-      run: |
-        echo "🏗️ Building VoiceInk application for macOS 14.5..."
-        
-        # Set deployment target for the main build
-        export MACOSX_DEPLOYMENT_TARGET=14.5
-        export SDKROOT=macosx
-        
-        # Build with verbose output and deployment target flags
-        make build VERBOSE=1 \
-          DEPLOYMENT_TARGET=14.5 \
+        # Use xcodebuild directly with the correct paths
+        xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
           MACOSX_DEPLOYMENT_TARGET=14.5 \
-          SDKROOT=macosx
+          -allowProvisioningUpdates \
+          -derivedDataPath build
         
-        # Verify the build succeeded
-        if [ -d "build/VoiceInk.app" ]; then
-          echo "✅ VoiceInk built successfully at build/VoiceInk.app"
-          
-          # Verify deployment target in the built app
-          echo "🔍 Verifying deployment target in built app..."
-          otool -l build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -A3 LC_BUILD_VERSION || true
-          otool -l build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -A2 LC_VERSION_MIN_MACOSX || true
-          
-          # Show app bundle structure
-          ls -la build/VoiceInk.app/Contents
+        # Verify build succeeded
+        if [ -d "build/Build/Products/Release/VoiceInk.app" ]; then
+          echo "✅ Build succeeded!"
+          ls -la build/Build/Products/Release/VoiceInk.app
         else
-          echo "❌ VoiceInk build failed - app bundle not found"
-          ls -la build/ || true
+          echo "❌ Build failed"
           exit 1
         fi
     
-    - name: Verify macOS compatibility
-      run: |
-        echo "✅ Verifying macOS 14.5 compatibility..."
-        
-        # Check minimum OS version required
-        MIN_VERSION=$(otool -l build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -A3 LC_BUILD_VERSION | grep minos | awk '{print $2}')
-        
-        if [ -z "$MIN_VERSION" ]; then
-          MIN_VERSION=$(otool -l build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -A2 LC_VERSION_MIN_MACOSX | grep version | awk '{print $2}')
-        fi
-        
-        echo "🔧 Detected minimum macOS version: $MIN_VERSION"
-        
-        # Convert version to numeric comparison (14.5 = 14.5)
-        if [ "$(echo "$MIN_VERSION < 14.5" | bc)" -eq 1 ]; then
-          echo "✅ App is compatible with macOS 14.5 (requires $MIN_VERSION)"
-        elif [ "$(echo "$MIN_VERSION == 14.5" | bc)" -eq 1 ]; then
-          echo "✅ App requires exactly macOS 14.5"
-        else
-          echo "⚠️ App requires macOS $MIN_VERSION, which is newer than 14.5"
-          echo "🔧 Attempting to fix deployment target..."
-          
-          # Try to manually set deployment target if needed
-          install_name_tool -delete_rpath @executable_path/../Frameworks build/VoiceInk.app/Contents/MacOS/VoiceInk || true
-          echo "⚠️ Manual deployment target fix attempted"
-        fi
-    
-    - name: Package application for distribution
-      run: |
-        echo "📦 Packaging application for macOS 14.5+..."
-        
-        # Create a clean output directory
-        mkdir -p dist
-        
-        # Copy the built application
-        cp -R build/VoiceInk.app dist/
-        
-        # Create a version file with build info
-        cat > dist/VERSION.txt << EOF
-        VoiceInk Build Information
-        ===========================
-        Build Date: $(date)
-        Commit SHA: ${{ github.sha }}
-        GitHub Runner: ${{ runner.os }}-${{ runner.arch }}
-        Xcode Version: $(xcodebuild -version | head -1)
-        Deployment Target: macOS 14.5
-        Build Machine: GitHub Actions macos-15
-        Compatibility: macOS 14.5 and later
-        EOF
-        
-        echo "✅ Application packaged successfully in dist/ directory"
-    
-    - name: Create compatibility report
-      run: |
-        echo "📋 Generating macOS compatibility report..."
-        
-        cat > dist/COMPATIBILITY.txt << EOF
-        macOS Compatibility Report
-        ==========================
-        This build is configured to run on macOS 14.5 and later.
-
-        Verification Results:
-        - Deployment Target: macOS 14.5 ✓
-        - Architecture: $(file build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -o 'arm64\|x86_64')
-        - Minimum OS Version: $(otool -l build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -A3 LC_BUILD_VERSION | grep minos | awk '{print $2}' || echo "Not found")
-        - SDK Used: $(xcrun --show-sdk-version)
-
-        Build Environment:
-        - Xcode: $(xcodebuild -version | head -1)
-        - macOS Runner: ${{ runner.os }}-${{ runner.arch }}
-        - Build Date: $(date)
-
-        Note: This application was built with Xcode 16 but targets macOS 14.5 for maximum compatibility.
-        EOF
-    
-    - name: Upload build artifact
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: VoiceInk-${{ github.sha }}-macos14.5
-        path: dist/VoiceInk.app
-        retention-days: 7
-    
-    - name: Create release zip
-      if: github.event_name == 'workflow_dispatch'
-      run: |
-        echo "📦 Creating release zip for macOS 14.5..."
-        cd dist
-        zip -r ../VoiceInk-${{ github.sha }}-macos14.5.zip VoiceInk.app VERSION.txt COMPATIBILITY.txt
-        
-        # Show zip contents
-        unzip -l ../VoiceInk-${{ github.sha }}-macos14.5.zip
-        
-        echo "✅ Release zip created: VoiceInk-${{ github.sha }}-macos14.5.zip"
-    
-    - name: Upload release zip
-      if: github.event_name == 'workflow_dispatch'
-      uses: actions/upload-artifact@v4
-      with:
-        name: VoiceInk-${{ github.sha }}-release-macos14.5
-        path: VoiceInk-${{ github.sha }}-macos14.5.zip
-        retention-days: 30
-    
-    - name: Display final build information
-      run: |
-        echo "🎉 VoiceInk build completed successfully!"
-        echo "🎯 Target: macOS 14.5 and later"
-        echo "💻 Built with: Xcode 16 on macOS 15"
-        echo "📁 Build artifact: dist/VoiceInk.app"
-        echo "📦 Release zip: VoiceInk-${{ github.sha }}-macos14.5.zip"
-        echo "⏰ Total build time: $(($SECONDS / 60)) minutes and $(($SECONDS % 60)) seconds"
-        
-        # Final compatibility check
-        echo "✅ Final compatibility verification:"
-        echo "   - Deployment target: $MACOSX_DEPLOYMENT_TARGET"
-        echo "   - Minimum OS version: $(otool -l build/VoiceInk.app/Contents/MacOS/VoiceInk | grep -A3 LC_BUILD_VERSION | grep minos | awk '{print $2}' || echo "Not found")"
+        name: VoiceInk-macos14.5
+        path: build/Build/Products/Release/VoiceInk.app

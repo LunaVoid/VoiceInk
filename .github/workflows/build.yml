@@ -1,0 +1,111 @@
+name: Build VoiceInk
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-14  # Matches VoiceInk's macOS 14.0+ requirement
+    timeout-minutes: 60  # Give it plenty of time for the full build
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'  # Important for any submodules
+    
+    - name: Set up Xcode
+      run: |
+        # Use the latest Xcode on the runner
+        sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+        xcodebuild -version
+        swift --version
+    
+    - name: Install required tools
+      run: |
+        # Ensure Homebrew is available
+        if ! command -v brew &> /dev/null; then
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+        fi
+        
+        # Install required dependencies
+        brew update
+        brew install cmake
+        
+        # Verify all required tools are installed
+        echo "✅ Git version: $(git --version)"
+        echo "✅ Xcodebuild version: $(xcodebuild -version)"
+        echo "✅ Swift version: $(swift --version)"
+        echo "✅ CMake version: $(cmake --version)"
+    
+    - name: Health check prerequisites
+      run: |
+        # Run the health check from the Makefile
+        make check
+        echo "✅ Health check passed - all required tools are installed"
+    
+    - name: Build VoiceInk (complete build)
+      run: |
+        # This will build everything including whisper.xcframework
+        make all
+        
+        # Verify the build succeeded by checking for the app bundle
+        if [ -d "build/VoiceInk.app" ]; then
+          echo "✅ VoiceInk built successfully at build/VoiceInk.app"
+        else
+          echo "❌ VoiceInk build failed - app bundle not found"
+          ls -la build/
+          exit 1
+        fi
+    
+    - name: Package application for distribution
+      run: |
+        # Create a clean output directory
+        mkdir -p dist
+        
+        # Copy the built application
+        cp -R build/VoiceInk.app dist/
+        
+        # Create a version file with build info
+        echo "VoiceInk Build Information" > dist/VERSION.txt
+        echo "Build Date: $(date)" >> dist/VERSION.txt
+        echo "Commit SHA: ${{ github.sha }}" >> dist/VERSION.txt
+        echo "GitHub Runner: ${{ runner.os }}-${{ runner.arch }}" >> dist/VERSION.txt
+        
+        echo "✅ Application packaged successfully in dist/ directory"
+    
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: VoiceInk-${{ github.sha }}-macos
+        path: dist/VoiceInk.app
+        retention-days: 7
+    
+    - name: Create release zip (optional)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        cd dist
+        zip -r ../VoiceInk-${{ github.sha }}-macos.zip VoiceInk.app VERSION.txt
+        
+        echo "✅ Release zip created: VoiceInk-${{ github.sha }}-macos.zip"
+    
+    - name: Upload release zip (optional)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: VoiceInk-${{ github.sha }}-release
+        path: VoiceInk-${{ github.sha }}-macos.zip
+        retention-days: 30
+    
+    - name: Display final build information
+      run: |
+        echo "🎉 VoiceInk build completed successfully!"
+        echo "📁 Build artifact: dist/VoiceInk.app"
+        echo "📦 Release zip: VoiceInk-${{ github.sha }}-macos.zip"
+        echo "⏰ Total build time: $(($SECONDS / 60)) minutes and $(($SECONDS % 60)) seconds"

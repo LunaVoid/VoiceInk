@@ -22,33 +22,38 @@ jobs:
           brew update
           brew install cmake
       
-      - name: Build using official Makefile
+      - name: Fix Makefile path issue and build
         run: |
-          echo "🔧 Building VoiceInk using official Makefile..."
+          echo "🔧 Running Makefile steps manually with correct paths..."
           
-          # Run the official build process
-          make all
+          # Run make whisper first to build the framework
+          make whisper
           
-          echo "✅ Makefile build completed!"
-      
-      - name: Verify build artifacts
-        run: |
-          echo "🔍 Verifying build artifacts..."
+          # The Makefile puts it in ~/VoiceInk-Dependencies, but Xcode expects ./VoiceInk-Dependencies
+          # So we copy it to the right location
+          echo "📂 Copying framework from home directory to project directory..."
           
-          # Find the built app
-          find . -name "VoiceInk.app" -type d
-          
-          # Check if it's in the expected location
-          if [ -d "build/Release/VoiceInk.app" ]; then
-            echo "✅ App found at: build/Release/VoiceInk.app"
-            ls -la "build/Release/VoiceInk.app"
-          elif [ -d "Build/Products/Release/VoiceInk.app" ]; then
-            echo "✅ App found at: Build/Products/Release/VoiceInk.app"
-            ls -la "Build/Products/Release/VoiceInk.app"
+          if [ -d "$HOME/VoiceInk-Dependencies" ]; then
+            cp -R "$HOME/VoiceInk-Dependencies" "./VoiceInk-Dependencies"
+            echo "✅ Copied dependencies to project directory"
+            ls -la ./VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
           else
-            echo "🔍 Searching for VoiceInk.app..."
-            find . -name "VoiceInk.app" -type d -exec ls -la {} \;
+            echo "❌ Dependencies not found in home directory"
+            echo "🔍 Looking for whisper frameworks..."
+            find . -name "whisper.xcframework" -type d 2>/dev/null || echo "No whisper.xcframework found"
+            find $HOME -name "whisper.xcframework" -type d 2>/dev/null || echo "No whisper.xcframework in home"
+            exit 1
           fi
+      
+      - name: Build VoiceInk
+        run: |
+          echo "🔨 Building VoiceInk..."
+          
+          # Verify framework is in the right place
+          ls -la ./VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
+          
+          # Build the project
+          make build
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -17,49 +17,52 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
           xcodebuild -version
       
-      - name: Install dependencies
+      - name: Create framework from scratch - bulletproof approach
         run: |
-          brew update
-          brew install cmake
+          echo "🔧 Creating framework structure exactly as Xcode expects..."
+          
+          # Create the EXACT directory structure
+          mkdir -p VoiceInk-Dependencies/whisper.cpp/build-apple
+          
+          # Download a pre-built working whisper.xcframework 
+          # Using the latest release from whisper.cpp
+          cd VoiceInk-Dependencies/whisper.cpp/build-apple
+          
+          # Get latest whisper.cpp release with XCFramework
+          curl -L -o whisper.xcframework.zip "https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-v1.5.4-xcframework.zip"
+          
+          # Extract it
+          unzip whisper.xcframework.zip
+          
+          # Verify it exists
+          echo "✅ Framework created:"
+          ls -la whisper.xcframework/
+          
+          # Go back to project root
+          cd ../../../
+          
+          # Final verification - this MUST show the framework
+          echo "🔍 Final verification - framework at expected location:"
+          ls -la VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
       
-      - name: Fix Makefile path issue and build
+      - name: Build VoiceInk with minimal settings
         run: |
-          echo "🔧 Running Makefile steps manually with correct paths..."
+          echo "🔨 Building VoiceInk with minimal complexity..."
           
-          # Run make whisper first to build the framework
-          make whisper
+          # Simple, direct build
+          xcodebuild -project VoiceInk.xcodeproj \
+                     -scheme VoiceInk \
+                     -configuration Release \
+                     -derivedDataPath build \
+                     CODE_SIGNING_REQUIRED=NO
           
-          # The Makefile puts it in ~/VoiceInk-Dependencies, but Xcode expects ./VoiceInk-Dependencies
-          # So we copy it to the right location
-          echo "📂 Copying framework from home directory to project directory..."
+          echo "✅ Build completed!"
           
-          if [ -d "$HOME/VoiceInk-Dependencies" ]; then
-            cp -R "$HOME/VoiceInk-Dependencies" "./VoiceInk-Dependencies"
-            echo "✅ Copied dependencies to project directory"
-            ls -la ./VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
-          else
-            echo "❌ Dependencies not found in home directory"
-            echo "🔍 Looking for whisper frameworks..."
-            find . -name "whisper.xcframework" -type d 2>/dev/null || echo "No whisper.xcframework found"
-            find $HOME -name "whisper.xcframework" -type d 2>/dev/null || echo "No whisper.xcframework in home"
-            exit 1
-          fi
-      
-      - name: Build VoiceInk
-        run: |
-          echo "🔨 Building VoiceInk..."
-          
-          # Verify framework is in the right place
-          ls -la ./VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
-          
-          # Build the project
-          make build
+          # Find the app
+          find build -name "VoiceInk.app" -type d
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: VoiceInk-macos14.5
-          path: |
-            build/Release/VoiceInk.app
-            Build/Products/Release/VoiceInk.app
-            **/VoiceInk.app
+          path: build/Build/Products/Release/VoiceInk.app

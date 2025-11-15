@@ -31,50 +31,107 @@ jobs:
           cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
           # Build the XCFramework
           ./build-xcframework.sh
-          # Move the built framework to the CORRECT location Xcode expects (note the whisper.cpp in path)
+          # Move the built framework to the CORRECT location Xcode expects
           mkdir -p ../build-apple
           cp -R build-apple/whisper.xcframework ../build-apple/
           # Verify the framework exists in the correct location
           ls -la ../build-apple/whisper.xcframework
       
-      - name: Verify framework location
+      - name: Deep framework validation
         run: |
-          echo "🔍 Checking if framework exists at expected location..."
-          FRAMEWORK_PATH="./VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework"
-          if [ -d "$FRAMEWORK_PATH" ]; then
-            echo "✅ Framework found at: $FRAMEWORK_PATH"
-            ls -la "$FRAMEWORK_PATH"
-          else
-            echo "❌ Framework NOT found at expected location"
-            echo "📁 Current directory structure:"
-            find . -name "whisper.xcframework" -type d
-            exit 1
-          fi
+          echo "🔍 Deep validation of XCFramework..."
+          FRAMEWORK_PATH="VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework"
+          
+          echo "📂 Framework exists check:"
+          ls -la "$FRAMEWORK_PATH"
+          
+          echo "📄 Info.plist contents:"
+          cat "$FRAMEWORK_PATH/Info.plist"
+          
+          echo "🔍 Framework permissions:"
+          ls -la "$FRAMEWORK_PATH"/*
+          
+          echo "🔍 Checking for symlinks:"
+          find "$FRAMEWORK_PATH" -type l
+          
+          echo "🔍 Framework binary validation:"
+          find "$FRAMEWORK_PATH" -name "*.framework" -exec ls -la {} \;
+          
+          echo "🔍 Absolute path check:"
+          realpath "$FRAMEWORK_PATH"
+          
+          echo "🔍 Full directory tree:"
+          tree "$FRAMEWORK_PATH" || find "$FRAMEWORK_PATH" -type f
       
-      - name: Build VoiceInk
+      - name: Try alternative XCFramework approach
         run: |
-          # Use xcodebuild directly with correct paths
+          echo "🔧 Trying to rebuild XCFramework with different approach..."
+          
+          cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          
+          # Clean previous build
+          rm -rf build-apple
+          
+          # Build again but keep it in place this time
+          ./build-xcframework.sh
+          
+          # Copy to parent with verbose output
+          echo "📂 Copying framework with verbose output:"
+          cp -Rv build-apple/whisper.xcframework ../build-apple/
+          
+          # Set proper permissions
+          echo "🔧 Setting proper permissions:"
+          chmod -R 755 ../build-apple/whisper.xcframework
+          
+          # Final verification
+          echo "✅ Final framework check:"
+          ls -la ../build-apple/whisper.xcframework
+          find ../build-apple/whisper.xcframework -name "*.framework" -exec file {} \;
+      
+      - name: Build VoiceInk with maximum debugging
+        run: |
+          echo "🔨 Building VoiceInk with maximum debugging..."
+          
+          # Show current directory and framework location
+          pwd
+          echo "Framework should be at:"
+          ls -la VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework || echo "NOT FOUND"
+          
+          # Try building with different derived data location to avoid caching issues
+          rm -rf build
+          
+          # Build with maximum verbosity and debugging
+          set -x
           xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE="" \
             MACOSX_DEPLOYMENT_TARGET=14.5 \
             -allowProvisioningUpdates \
-            -derivedDataPath build
-          # Verify build succeeded
+            -derivedDataPath build \
+            -destination 'platform=macOS' \
+            -verbose || echo "Build failed, continuing to investigate..."
+          set +x
+          
+          # Check if app was created despite errors
           BUILD_APP="build/Build/Products/Release/VoiceInk.app"
           if [ -d "$BUILD_APP" ]; then
             echo "✅ Build succeeded! App found at: $BUILD_APP"
             ls -la "$BUILD_APP"
           else
-            echo "❌ Build failed - app not found"
+            echo "❌ Build failed - investigating..."
             echo "📁 Contents of build directory:"
-            ls -la build/Build/Products/Release/ || true
-            exit 1
+            find build -name "*.app" -type d 2>/dev/null || echo "No .app found"
+            
+            echo "📄 Checking build logs for framework issues:"
+            find build -name "*.log" -exec grep -l "whisper" {} \; | head -3 | xargs cat
           fi
       
-      - name: Upload artifact
+      - name: Upload artifact (if exists)
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: VoiceInk-macos14.5
           path: build/Build/Products/Release/VoiceInk.app

@@ -7,78 +7,74 @@ jobs:
   build:
     runs-on: macos-15  # Has Xcode 16
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        submodules: 'recursive'
-    
-    - name: Set up Xcode 16
-      run: |
-        sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
-        xcodebuild -version
-    
-    - name: Install dependencies
-      run: |
-        brew update
-        brew install cmake
-    
-    - name: Create exact directory structure
-      run: |
-        # Create the EXACT directory structure that Xcode expects
-        mkdir -p VoiceInk-Dependencies/whisper.cpp/build-apple
-        
-        # Clone whisper.cpp directly into the expected location
-        git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
-        cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
-        
-        # Build the XCFramework
-        ./build-xcframework.sh
-        
-        # Move the built framework to the exact location Xcode expects
-        mkdir -p ../../build-apple
-        cp -R build-apple/whisper.xcframework ../../build-apple/
-        
-        # Verify the framework exists in the correct location
-        ls -la ../../build-apple/whisper.xcframework
-    
-    - name: Verify framework location
-      run: |
-        echo "🔍 Checking if framework exists at expected location..."
-        FRAMEWORK_PATH="./VoiceInk-Dependencies/build-apple/whisper.xcframework"
-        if [ -d "$FRAMEWORK_PATH" ]; then
-          echo "✅ Framework found at: $FRAMEWORK_PATH"
-          ls -la "$FRAMEWORK_PATH"
-        else
-          echo "❌ Framework NOT found at expected location"
-          echo "📁 Current directory structure:"
-          find . -name "whisper.xcframework" -type d
-          exit 1
-        fi
-    
-    - name: Build VoiceInk
-      run: |
-        # Use xcodebuild directly with correct paths
-        xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          MACOSX_DEPLOYMENT_TARGET=14.5 \
-          -allowProvisioningUpdates \
-          -derivedDataPath build
-        
-        # Verify build succeeded
-        BUILD_APP="build/Build/Products/Release/VoiceInk.app"
-        if [ -d "$BUILD_APP" ]; then
-          echo "✅ Build succeeded! App found at: $BUILD_APP"
-          ls -la "$BUILD_APP"
-        else
-          echo "❌ Build failed - app not found"
-          echo "📁 Contents of build directory:"
-          ls -la build/Build/Products/Release/ || true
-          exit 1
-        fi
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: VoiceInk-macos14.5
-        path: build/Build/Products/Release/VoiceInk.app
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      
+      - name: Set up Xcode 16
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+          xcodebuild -version
+      
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install cmake
+      
+      - name: Create exact directory structure
+        run: |
+          # Create the EXACT directory structure that Xcode expects
+          mkdir -p VoiceInk-Dependencies/whisper.cpp
+          # Clone whisper.cpp directly into the expected location
+          git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          # Build the XCFramework
+          ./build-xcframework.sh
+          # Move the built framework to the CORRECT location Xcode expects (note the whisper.cpp in path)
+          mkdir -p ../build-apple
+          cp -R build-apple/whisper.xcframework ../build-apple/
+          # Verify the framework exists in the correct location
+          ls -la ../build-apple/whisper.xcframework
+      
+      - name: Verify framework location
+        run: |
+          echo "🔍 Checking if framework exists at expected location..."
+          FRAMEWORK_PATH="./VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework"
+          if [ -d "$FRAMEWORK_PATH" ]; then
+            echo "✅ Framework found at: $FRAMEWORK_PATH"
+            ls -la "$FRAMEWORK_PATH"
+          else
+            echo "❌ Framework NOT found at expected location"
+            echo "📁 Current directory structure:"
+            find . -name "whisper.xcframework" -type d
+            exit 1
+          fi
+      
+      - name: Build VoiceInk
+        run: |
+          # Use xcodebuild directly with correct paths
+          xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_STYLE=Manual \
+            MACOSX_DEPLOYMENT_TARGET=14.5 \
+            -allowProvisioningUpdates \
+            -derivedDataPath build
+          # Verify build succeeded
+          BUILD_APP="build/Build/Products/Release/VoiceInk.app"
+          if [ -d "$BUILD_APP" ]; then
+            echo "✅ Build succeeded! App found at: $BUILD_APP"
+            ls -la "$BUILD_APP"
+          else
+            echo "❌ Build failed - app not found"
+            echo "📁 Contents of build directory:"
+            ls -la build/Build/Products/Release/ || true
+            exit 1
+          fi
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceInk-macos14.5
+          path: build/Build/Products/Release/VoiceInk.app

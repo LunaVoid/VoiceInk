@@ -1,8 +1,6 @@
 name: Build VoiceInk
-
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: macos-15
@@ -11,56 +9,68 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      
       - name: Set up Xcode 16
         run: |
           sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
           xcodebuild -version
-      
-      - name: Create framework from scratch - bulletproof approach
+      - name: Install dependencies
         run: |
-          echo "🔧 Creating framework structure exactly as Xcode expects..."
-          
-          # Create the EXACT directory structure
-          mkdir -p VoiceInk-Dependencies/whisper.cpp/build-apple
-          
-          # Download a pre-built working whisper.xcframework 
-          # Using the latest release from whisper.cpp
-          cd VoiceInk-Dependencies/whisper.cpp/build-apple
-          
-          # Get latest whisper.cpp release with XCFramework
-          curl -L -o whisper.xcframework.zip "https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-v1.5.4-xcframework.zip"
-          
-          # Extract it
-          unzip whisper.xcframework.zip
-          
-          # Verify it exists
-          echo "✅ Framework created:"
-          ls -la whisper.xcframework/
-          
-          # Go back to project root
-          cd ../../../
-          
-          # Final verification - this MUST show the framework
-          echo "🔍 Final verification - framework at expected location:"
-          ls -la VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
-      
-      - name: Build VoiceInk with minimal settings
+          brew update
+          brew install cmake
+      - name: Build whisper.xcframework properly
         run: |
-          echo "🔨 Building VoiceInk with minimal complexity..."
+          # Create the exact directory structure Xcode expects
+          mkdir -p VoiceInk-Dependencies/whisper.cpp
           
-          # Simple, direct build
+          # Clone whisper.cpp directly into the right spot
+          git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          
+          # Navigate to the whisper.cpp directory and build
+          cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          
+          # Make sure the build script is executable
+          chmod +x build-xcframework.sh
+          
+          # Build the XCFramework (this creates it in build-apple/whisper.xcframework)
+          echo "Building whisper.xcframework..."
+          ./build-xcframework.sh
+          
+          # Create the target directory structure
+          mkdir -p ../build-apple
+          
+          # Copy the built framework to where Xcode expects it
+          cp -R build-apple/whisper.xcframework ../build-apple/
+          
+          # Verify it's in the right place
+          echo "Verifying framework location..."
+          ls -la ../build-apple/whisper.xcframework
+      - name: Build VoiceInk
+        run: |
+          # Verify the framework exists before building
+          if [ ! -d "VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework" ]; then
+            echo "❌ Framework not found at expected location!"
+            echo "🔍 Searching for framework:"
+            find . -name "whisper.xcframework" -type d
+            exit 1
+          fi
+          
+          # Build with proper settings
           xcodebuild -project VoiceInk.xcodeproj \
                      -scheme VoiceInk \
                      -configuration Release \
-                     -derivedDataPath build \
-                     CODE_SIGNING_REQUIRED=NO
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     MACOSX_DEPLOYMENT_TARGET=14.5 \
+                     -derivedDataPath build
           
-          echo "✅ Build completed!"
-          
-          # Find the app
-          find build -name "VoiceInk.app" -type d
-      
+          # Verify the build succeeded
+          if [ -d "build/Build/Products/Release/VoiceInk.app" ]; then
+            echo "✅ Build succeeded!"
+            ls -la build/Build/Products/Release/VoiceInk.app
+          else
+            echo "❌ Build failed"
+            exit 1
+          fi
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

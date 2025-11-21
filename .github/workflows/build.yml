@@ -17,43 +17,25 @@ jobs:
         run: |
           brew update
           brew install cmake
-      - name: Build whisper.xcframework in EXACT location Xcode expects
+      - name: Build whisper framework correctly
         run: |
-          echo "🔧 Creating EXACT directory structure Xcode expects..."
-          # Create the precise directory structure at the root level
-          mkdir -p /Users/runner/work/VoiceInk/VoiceInk-Dependencies/whisper.cpp/build-apple
-          
-          echo "📦 Cloning whisper.cpp..."
-          git clone https://github.com/ggerganov/whisper.cpp.git /tmp/whisper-build
-          
-          echo "🔨 Building XCFramework..."
-          cd /tmp/whisper-build
-          chmod +x build-xcframework.sh
+          # Create the exact directory structure Xcode expects
+          mkdir -p VoiceInk-Dependencies/whisper.cpp
+          # Clone whisper.cpp directly into the expected location
+          git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          # Build the XCFramework
           ./build-xcframework.sh
-          
-          echo "✅ Copying framework to EXACT location Xcode needs..."
-          cp -R build-apple/whisper.xcframework /Users/runner/work/VoiceInk/VoiceInk-Dependencies/whisper.cpp/build-apple/
-          
-          echo "🔍 Verifying framework location..."
-          ls -la /Users/runner/work/VoiceInk/VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
+          # Move to the exact location Xcode needs
+          mkdir -p ../build-apple
+          mv build-apple/whisper.xcframework ../build-apple/
       - name: Build VoiceInk
         run: |
-          echo "🚀 Building VoiceInk with framework in correct location..."
-          xcodebuild -project VoiceInk.xcodeproj \
-                     -scheme VoiceInk \
-                     -configuration Release \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     MACOSX_DEPLOYMENT_TARGET=14.5 \
-                     -derivedDataPath build
-          # Verify build succeeded
-          if [ -d "build/Build/Products/Release/VoiceInk.app" ]; then
-            echo "🎉 SUCCESS! Build completed successfully!"
-            ls -la build/Build/Products/Release/VoiceInk.app
-          else
-            echo "❌ Build failed"
-            exit 1
-          fi
+          xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            MACOSX_DEPLOYMENT_TARGET=14.5 \
+            -derivedDataPath build
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

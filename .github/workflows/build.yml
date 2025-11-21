@@ -17,61 +17,41 @@ jobs:
         run: |
           brew update
           brew install cmake
-      - name: Build whisper.xcframework correctly
+      - name: Build whisper.xcframework in EXACT location Xcode expects
         run: |
-          echo "🔧 Building whisper.xcframework..."
-          # Create the directory structure at the ROOT level (not inside VoiceInk/)
-          mkdir -p VoiceInk-Dependencies/whisper.cpp
-          # Clone whisper.cpp
-          git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
-          cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
-          # Make build script executable
+          echo "🔧 Creating EXACT directory structure Xcode expects..."
+          # Create the precise directory structure at the root level
+          mkdir -p /Users/runner/work/VoiceInk/VoiceInk-Dependencies/whisper.cpp/build-apple
+          
+          echo "📦 Cloning whisper.cpp..."
+          git clone https://github.com/ggerganov/whisper.cpp.git /tmp/whisper-build
+          
+          echo "🔨 Building XCFramework..."
+          cd /tmp/whisper-build
           chmod +x build-xcframework.sh
-          # Build the framework
           ./build-xcframework.sh
-          # Copy to CORRECT location where Xcode expects it
-          mkdir -p ../../build-apple
-          cp -R build-apple/whisper.xcframework ../../build-apple/
-          echo "✅ Framework built and copied to correct location"
-          ls -la ../../build-apple/whisper.xcframework
-      - name: Verify framework location - CRITICAL STEP
-        run: |
-          echo "🔍 Verifying framework is in the EXACT location Xcode expects..."
-          EXPECTED_PATH="VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework"
-          if [ -d "$EXPECTED_PATH" ]; then
-            echo "✅ SUCCESS! Framework found at: $EXPECTED_PATH"
-            echo "Framework contents:"
-            ls -la "$EXPECTED_PATH"
-          else
-            echo "❌ CRITICAL ERROR: Framework not found at expected path: $EXPECTED_PATH"
-            echo "🔍 Current directory structure:"
-            pwd
-            echo "📁 Contents of VoiceInk-Dependencies:"
-            ls -la VoiceInk-Dependencies/ || echo "No VoiceInk-Dependencies directory"
-            echo "📁 Contents of VoiceInk-Dependencies/whisper.cpp:"
-            ls -la VoiceInk-Dependencies/whisper.cpp/ || echo "No whisper.cpp directory"
-            echo "📁 Contents of VoiceInk-Dependencies/whisper.cpp/build-apple:"
-            ls -la VoiceInk-Dependencies/whisper.cpp/build-apple/ || echo "No build-apple directory"
-            exit 1
-          fi
+          
+          echo "✅ Copying framework to EXACT location Xcode needs..."
+          cp -R build-apple/whisper.xcframework /Users/runner/work/VoiceInk/VoiceInk-Dependencies/whisper.cpp/build-apple/
+          
+          echo "🔍 Verifying framework location..."
+          ls -la /Users/runner/work/VoiceInk/VoiceInk-Dependencies/whisper.cpp/build-apple/whisper.xcframework
       - name: Build VoiceInk
         run: |
-          echo "🔨 Building VoiceInk with correct framework location..."
+          echo "🚀 Building VoiceInk with framework in correct location..."
           xcodebuild -project VoiceInk.xcodeproj \
                      -scheme VoiceInk \
                      -configuration Release \
-                     -derivedDataPath build \
-                     CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
-                     MACOSX_DEPLOYMENT_TARGET=14.5
+                     CODE_SIGNING_REQUIRED=NO \
+                     MACOSX_DEPLOYMENT_TARGET=14.5 \
+                     -derivedDataPath build
           # Verify build succeeded
           if [ -d "build/Build/Products/Release/VoiceInk.app" ]; then
-            echo "🎉 SUCCESS! VoiceInk built successfully!"
+            echo "🎉 SUCCESS! Build completed successfully!"
             ls -la build/Build/Products/Release/VoiceInk.app
           else
-            echo "❌ Build failed - checking for any error logs..."
-            echo "📄 Last 20 lines of build log:"
-            tail -20 build/Logs/Build/*.log || echo "No build logs found"
+            echo "❌ Build failed"
             exit 1
           fi
       - name: Upload artifact

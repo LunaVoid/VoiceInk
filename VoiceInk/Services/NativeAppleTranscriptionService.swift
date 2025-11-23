@@ -144,12 +144,11 @@ class NativeAppleTranscriptionService: TranscriptionService {
     }
     
     
-    
+    #if canImport(Speech) && ENABLE_NATIVE_SPEECH_ANALYZER
     // Forward-compatibility: Use Any here because SpeechTranscriber is only available in future macOS SDKs.
     // This avoids referencing an unavailable SDK symbol while keeping the method shape for later adoption.
     @available(macOS 26, *)
     private func ensureModelIsAvailable(for transcriber: SpeechTranscriber, locale: Locale) async throws {
-        #if canImport(Speech) && ENABLE_NATIVE_SPEECH_ANALYZER
         let installedLocales = await SpeechTranscriber.installedLocales
         let isInstalled = installedLocales.map({ $0.identifier(.bcp47) }).contains(locale.identifier(.bcp47))
 
@@ -164,6 +163,6 @@ class NativeAppleTranscriptionService: TranscriptionService {
                 // Note: We don't throw an error here, as transcription might still work with a base model.
             }
         }
-        #endif
     }
+    #endif
 } 

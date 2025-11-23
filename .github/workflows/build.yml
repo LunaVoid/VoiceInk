@@ -19,16 +19,13 @@ jobs:
           brew install cmake
       - name: Build whisper framework correctly
         run: |
-          # Create the exact directory structure Xcode expects
-          mkdir -p VoiceInk-Dependencies/whisper.cpp
+          # Create the dependencies directory in the parent folder
+          mkdir -p ../VoiceInk-Dependencies
           # Clone whisper.cpp directly into the expected location
-          git clone https://github.com/ggerganov/whisper.cpp.git VoiceInk-Dependencies/whisper.cpp/whisper.cpp
-          cd VoiceInk-Dependencies/whisper.cpp/whisper.cpp
+          git clone https://github.com/ggerganov/whisper.cpp.git ../VoiceInk-Dependencies/whisper.cpp
+          cd ../VoiceInk-Dependencies/whisper.cpp
           # Build the XCFramework
           ./build-xcframework.sh
-          # Move to the exact location Xcode needs
-          mkdir -p ../build-apple
-          mv build-apple/whisper.xcframework ../build-apple/
       - name: Build VoiceInk
         run: |
           xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \

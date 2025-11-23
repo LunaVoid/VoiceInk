@@ -31,10 +31,11 @@ jobs:
           xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            MACOSX_DEPLOYMENT_TARGET=15.0 \
+            MACOSX_DEPLOYMENT_TARGET=14.0 \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS="" \
             -derivedDataPath build
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VoiceInk-macos15.0
+          name: VoiceInk-macos14.0
           path: build/Build/Products/Release/VoiceInk.app

@@ -140,12 +140,15 @@ class AIEnhancementService: ObservableObject {
     }
 
     private func getSystemMessage(for mode: EnhancementPrompt) async -> String {
-        let selectedText = await SelectedTextService.fetchSelectedText()
-
-        let selectedTextContext = if let selectedText = selectedText, !selectedText.isEmpty {
-            "\n\n<CURRENTLY_SELECTED_TEXT>\n\(selectedText)\n</CURRENTLY_SELECTED_TEXT>"
+        let selectedTextContext: String
+        if AXIsProcessTrusted() {
+            if let selectedText = await SelectedTextService.fetchSelectedText(), !selectedText.isEmpty {
+                selectedTextContext = "\n\n<CURRENTLY_SELECTED_TEXT>\n\(selectedText)\n</CURRENTLY_SELECTED_TEXT>"
+            } else {
+                selectedTextContext = ""
+            }
         } else {
-            ""
+            selectedTextContext = ""
         }
 
         let clipboardContext = if useClipboardContext,
@@ -164,7 +167,7 @@ class AIEnhancementService: ObservableObject {
             ""
         }
 
-        let customVocabulary = customVocabularyService.getCustomVocabulary()
+        let customVocabulary = customVocabularyService.getCustomVocabulary(from: modelContext)
 
         let allContextSections = selectedTextContext + clipboardContext + screenCaptureContext
 
@@ -205,10 +208,6 @@ class AIEnhancementService: ObservableObject {
             self.lastSystemMessageSent = systemMessage
             self.lastUserMessageSent = formattedText
         }
-
-        // Log the message being sent to AI enhancement
-        logger.notice("AI Enhancement - System Message: \(systemMessage, privacy: .public)")
-        logger.notice("AI Enhancement - User Message: \(formattedText, privacy: .public)")
 
         if aiService.selectedProvider == .ollama {
             do {

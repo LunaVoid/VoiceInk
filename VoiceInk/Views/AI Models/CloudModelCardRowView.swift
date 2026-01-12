@@ -14,22 +14,20 @@ struct CloudModelCardView: View {
     @State private var isVerifying = false
     @State private var verificationStatus: VerificationStatus = .none
     @State private var isConfiguredState: Bool = false
+    @State private var verificationError: String? = nil
     
     enum VerificationStatus {
         case none, verifying, success, failure
     }
     
     private var isConfigured: Bool {
-        guard let savedKey = UserDefaults.standard.string(forKey: "\(providerKey)APIKey") else {
-            return false
-        }
-        return !savedKey.isEmpty
+        return APIKeyManager.shared.hasAPIKey(forProvider: providerKey)
     }
     
     private var providerKey: String {
         switch model.provider {
         case .groq:
-            return "GROQ"
+            return "Groq"
         case .elevenLabs:
             return "ElevenLabs"
         case .deepgram:
@@ -248,9 +246,15 @@ struct CloudModelCardView: View {
             }
             
             if verificationStatus == .failure {
-                Text("Invalid API key. Please check your key and try again.")
-                    .font(.caption)
-                    .foregroundColor(Color(.systemRed))
+                if let error = verificationError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(Color(.systemRed))
+                } else {
+                    Text("Verification failed")
+                        .font(.caption)
+                        .foregroundColor(Color(.systemRed))
+                }
             } else if verificationStatus == .success {
                 Text("API key verified successfully!")
                     .font(.caption)
@@ -260,7 +264,7 @@ struct CloudModelCardView: View {
     }
     
     private func loadSavedAPIKey() {
-        if let savedKey = UserDefaults.standard.string(forKey: "\(providerKey)APIKey") {
+        if let savedKey = APIKeyManager.shared.getAPIKey(forProvider: providerKey) {
             apiKey = savedKey
             verificationStatus = .success
         }
@@ -293,35 +297,35 @@ struct CloudModelCardView: View {
             return
         }
         
-        aiService.saveAPIKey(apiKey) { isValid in
+        aiService.saveAPIKey(apiKey) { isValid, errorMessage in
             DispatchQueue.main.async {
                 self.isVerifying = false
                 if isValid {
                     self.verificationStatus = .success
-                    // Save the API key
-                    UserDefaults.standard.set(self.apiKey, forKey: "\(self.providerKey)APIKey")
+                    self.verificationError = nil
+                    // Save the API key to Keychain
+                    APIKeyManager.shared.saveAPIKey(self.apiKey, forProvider: self.providerKey)
                     self.isConfiguredState = true
-                    
+
                     // Collapse the configuration section after successful verification
                     withAnimation(.easeInOut(duration: 0.3)) {
                         self.isExpanded = false
                     }
                 } else {
                     self.verificationStatus = .failure
+                    self.verificationError = errorMessage
                 }
-                
-                // Restore original provider
-                // aiService.selectedProvider = originalProvider // This line was removed as per the new_code
             }
         }
     }
     
     private func clearAPIKey() {
-        UserDefaults.standard.removeObject(forKey: "\(providerKey)APIKey")
+        APIKeyManager.shared.deleteAPIKey(forProvider: providerKey)
         apiKey = ""
         verificationStatus = .none
+        verificationError = nil
         isConfiguredState = false
-        
+
         // If this model is currently the default, clear it
         if isCurrent {
             Task {
@@ -331,7 +335,7 @@ struct CloudModelCardView: View {
                 }
             }
         }
-        
+
         withAnimation(.easeInOut(duration: 0.3)) {
             isExpanded = false
         }

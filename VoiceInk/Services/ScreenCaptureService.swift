@@ -1,7 +1,6 @@
 import Foundation
 import AppKit
 import Vision
-import os
 import ScreenCaptureKit
 
 @MainActor
@@ -9,25 +8,52 @@ class ScreenCaptureService: ObservableObject {
     @Published var isCapturing = false
     @Published var lastCapturedText: String?
     
-    private let logger = Logger(
-        subsystem: "com.prakashjoshipax.voiceink",
-        category: "aienhancement"
-    )
-    
-    private func getActiveWindowInfo() -> (title: String, ownerName: String, windowID: CGWindowID)? {
-        let windowListInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+    private struct WindowCandidate {
+        let title: String
+        let ownerName: String
+        let windowID: CGWindowID
+        let ownerPID: pid_t
+        let layer: Int32
+    }
 
-        if let frontWindow = windowListInfo.first(where: { info in
-            let layer = info[kCGWindowLayer as String] as? Int32 ?? 0
-            return layer == 0
-        }) {
-            guard let windowID = frontWindow[kCGWindowNumber as String] as? CGWindowID,
-                  let ownerName = frontWindow[kCGWindowOwnerName as String] as? String,
-                  let title = frontWindow[kCGWindowName as String] as? String else {
+    private func getActiveWindowInfo() -> (title: String, ownerName: String, windowID: CGWindowID)? {
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let windowListInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        
+        let candidates = windowListInfo.compactMap { info -> WindowCandidate? in
+            guard let windowID = info[kCGWindowNumber as String] as? CGWindowID,
+                  let ownerName = info[kCGWindowOwnerName as String] as? String,
+                  let ownerPIDNumber = info[kCGWindowOwnerPID as String] as? NSNumber,
+                  let layer = info[kCGWindowLayer as String] as? Int32 else {
                 return nil
             }
 
-            return (title: title, ownerName: ownerName, windowID: windowID)
+            let rawTitle = (info[kCGWindowName as String] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedTitle = rawTitle?.isEmpty == false ? rawTitle! : ownerName
+
+            return WindowCandidate(
+                title: resolvedTitle,
+                ownerName: ownerName,
+                windowID: windowID,
+                ownerPID: ownerPIDNumber.int32Value,
+                layer: layer
+            )
+        }
+
+        func isEligible(_ candidate: WindowCandidate) -> Bool {
+            guard candidate.layer == 0 else { return false }
+            guard candidate.ownerPID != currentPID else { return false }
+            return true
+        }
+
+        if let frontmostPID = frontmostPID,
+           let focusedWindow = candidates.first(where: { isEligible($0) && $0.ownerPID == frontmostPID }) {
+            return (title: focusedWindow.title, ownerName: focusedWindow.ownerName, windowID: focusedWindow.windowID)
+        }
+
+        if let fallbackWindow = candidates.first(where: isEligible) {
+            return (title: fallbackWindow.title, ownerName: fallbackWindow.ownerName, windowID: fallbackWindow.windowID)
         }
 
         return nil
@@ -56,7 +82,6 @@ class ScreenCaptureService: ObservableObject {
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
             
         } catch {
-            logger.notice("📸 Screen capture failed: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
@@ -93,8 +118,7 @@ class ScreenCaptureService: ObservableObject {
         switch result {
         case .success(let text):
             return text
-        case .failure(let error):
-            logger.notice("📸 Text recognition failed: \(error.localizedDescription, privacy: .public)")
+        case .failure:
             return nil
         }
     }
@@ -112,11 +136,8 @@ class ScreenCaptureService: ObservableObject {
         }
 
         guard let windowInfo = getActiveWindowInfo() else {
-            logger.notice("📸 No active window found")
             return nil
         }
-        
-        logger.notice("📸 Capturing: \(windowInfo.title, privacy: .public) (\(windowInfo.ownerName, privacy: .public))")
 
         var contextText = """
         Active Window: \(windowInfo.title)
@@ -129,11 +150,8 @@ class ScreenCaptureService: ObservableObject {
             
             if let extractedText = extractedText, !extractedText.isEmpty {
                 contextText += "Window Content:\n\(extractedText)"
-                let preview = String(extractedText.prefix(100))
-                logger.notice("📸 Text extracted: \(preview, privacy: .public)\(extractedText.count > 100 ? "..." : "")")
             } else {
                 contextText += "Window Content:\nNo text detected via OCR"
-                logger.notice("📸 No text extracted from window")
             }
             
             await MainActor.run {
@@ -142,8 +160,7 @@ class ScreenCaptureService: ObservableObject {
             
             return contextText
         }
-        
-        logger.notice("📸 Window capture failed")
+
         return nil
     }
 } 

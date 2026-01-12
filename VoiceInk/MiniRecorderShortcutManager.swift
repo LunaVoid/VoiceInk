@@ -61,6 +61,12 @@ class MiniRecorderShortcutManager: ObservableObject {
                 } else {
                     removeEnhancementShortcut()
                 }
+
+                if EnhancementShortcutSettings.shared.isSwitchPromptShortcutEnabled {
+                    setupPromptShortcuts()
+                } else {
+                    removePromptShortcuts()
+                }
             }
         }
     }
@@ -76,7 +82,13 @@ class MiniRecorderShortcutManager: ObservableObject {
                     } else {
                         removeEnhancementShortcut()
                     }
-                    setupPromptShortcuts()
+                    
+                    if EnhancementShortcutSettings.shared.isSwitchPromptShortcutEnabled {
+                        setupPromptShortcuts()
+                    } else {
+                        removePromptShortcuts()
+                    }
+                    
                     setupPowerModeShortcuts()
                 } else {
                     deactivateEscapeShortcut()

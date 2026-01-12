@@ -15,7 +15,8 @@ struct EnhancementShortcutsView: View {
             ShortcutRow(
                 title: "Switch Enhancement Prompt",
                 description: "Switch between your saved prompts without touching the UI. Use ⌘1–⌘0 to activate the corresponding prompt in the order they are saved.",
-                keyDisplay: ["⌘", "1 – 0"]
+                keyDisplay: ["⌘", "1 – 0"],
+                isOn: $shortcutSettings.isSwitchPromptShortcutEnabled
             )
         }
         .background(Color.clear)

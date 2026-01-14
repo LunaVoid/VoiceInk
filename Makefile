@@ -47,7 +47,9 @@ install: build
 	@APP_PATH=$$(find "$$HOME/Library/Developer/Xcode/DerivedData" -name "VoiceInk.app" -type d | grep "Release" | head -1) && \
 	if [ -n "$$APP_PATH" ]; then \
 		echo "Found Release app at: $$APP_PATH"; \
-		cp -R "$$APP_PATH" /Applications/; \
+		sudo rm -rf "/Applications/VoiceInk.app"; \
+		sudo cp -R "$$APP_PATH" /Applications/; \
+		sudo xattr -d com.apple.quarantine /Applications/VoiceInk.app 2>/dev/null || true; \
 		echo "VoiceInk successfully installed to /Applications!"; \
 	else \
 		echo "Release build not found. Please run 'make build' first."; \
@@ -79,6 +81,7 @@ help:
 	@echo "  whisper            Clone and build whisper.cpp XCFramework"
 	@echo "  setup              Copy whisper XCFramework to VoiceInk project"
 	@echo "  build              Build the VoiceInk Xcode project"
+	@echo "  install            Build and install VoiceInk to /Applications"
 	@echo "  run                Launch the built VoiceInk app"
 	@echo "  dev                Build and run the app (for development)"
 	@echo "  all                Run full build process (default)"

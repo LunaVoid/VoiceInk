@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct EnhancementSettingsView: View {
     @EnvironmentObject private var enhancementService: AIEnhancementService
+    @ObservedObject private var shortcutSettings = EnhancementShortcutSettings.shared
     @State private var isEditingPrompt = false
     @State private var isShortcutsExpanded = false
     @State private var selectedPromptForEdit: CustomPrompt?
@@ -33,6 +34,18 @@ struct EnhancementSettingsView: View {
                         }
                     }
                     .toggleStyle(.switch)
+                    
+                    Toggle(isOn: $shortcutSettings.isSwitchPromptShortcutEnabled) {
+                        HStack(spacing: 4) {
+                            Text("Fast Prompt Switching (⌘1-0)")
+                            InfoTip(
+                                title: "Prompt Shortcuts",
+                                message: "Use ⌘1 through ⌘0 to quickly switch enhancement prompts while recording."
+                            )
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .opacity(enhancementService.isEnhancementEnabled ? 1.0 : 0.8)
                     
                     HStack(spacing: 24) {
                         Toggle(isOn: $enhancementService.useClipboardContext) {

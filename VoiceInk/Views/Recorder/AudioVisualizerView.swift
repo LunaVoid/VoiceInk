@@ -42,20 +42,34 @@ struct AudioVisualizer: View {
     }
 
     private func updateWave(level: Double) {
-        let time = Date().timeIntervalSince1970
         let amplitude = max(0, min(1, level))
+        
+        // Boost mid-range levels for much better responsiveness to speech
+        // Using a smoother curve (sqrt-like) makes it feel more "alive"
+        let boosted = pow(amplitude, 0.5)
 
-        // Boost lower levels for better visibility
-        let boosted = pow(amplitude, 0.7)
-
-        withAnimation(.easeOut(duration: 0.08)) {
+        withAnimation(.interactiveSpring(response: 0.15, dampingFraction: 0.6)) {
             for i in 0..<barCount {
-                let wave = sin(time * 8 + phases[i]) * 0.5 + 0.5
+                // Combine a fast base wave with sound-reactive "jitter"
+                // The jitter is randomized slightly per bar to avoid the "robotic" uniform look
+                let randomOffset = Double.random(in: 0.8...1.2)
+                let jitter = Double.random(in: 0.0...0.3) * boosted
+                
+                // Base wave that only moves when there is sound
+                let wave = sin(Date().timeIntervalSince1970 * 12 + phases[i] * randomOffset) * 0.4 + 0.6
+                
+                // Distance from center (0.0 to 1.0)
                 let centerDistance = abs(Double(i) - Double(barCount) / 2) / Double(barCount / 2)
-                let centerBoost = 1.0 - (centerDistance * 0.4)
-
-                let height = minHeight + CGFloat(boosted * wave * centerBoost) * (maxHeight - minHeight)
-                heights[i] = max(minHeight, height)
+                
+                // Taper the edges slightly
+                let taper = 1.0 - (centerDistance * 0.3)
+                
+                // Final calculation: minHeight + sound impact + individual jitter
+                let reactiveComponent = boosted * wave * taper
+                let totalImpact = (reactiveComponent + jitter) * (maxHeight - minHeight)
+                
+                let height = minHeight + CGFloat(totalImpact)
+                heights[i] = max(minHeight, min(maxHeight, height))
             }
         }
     }

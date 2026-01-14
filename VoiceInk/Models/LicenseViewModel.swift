@@ -28,11 +28,13 @@ class LicenseViewModel: ObservableObject {
         if licenseManager.trialStartDate == nil {
             licenseManager.trialStartDate = Date()
             licenseState = .trial(daysRemaining: trialPeriodDays)
-            NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            }
         }
     }
 
-    private func loadLicenseState() {
+    func loadLicenseState() {
         // Check for existing license key
         if let storedLicenseKey = licenseManager.licenseKey {
             self.licenseKey = storedLicenseKey
@@ -115,7 +117,9 @@ class LicenseViewModel: ObservableObject {
                         // Existing activation is valid
                         licenseState = .licensed
                         validationMessage = "License activated successfully!"
-                        NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+                        DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            }
                         isValidating = false
                         return
                     }
@@ -140,7 +144,9 @@ class LicenseViewModel: ObservableObject {
                 // Update the license state for unlimited license
                 licenseState = .licensed
                 validationMessage = "License validated successfully!"
+                DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            }
                 isValidating = false
                 return
             }
@@ -148,7 +154,9 @@ class LicenseViewModel: ObservableObject {
             // Update the license state for activated license
             licenseState = .licensed
             validationMessage = "License activated successfully!"
-            NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            }
             
         } catch LicenseError.activationLimitReached(let details) {
             validationMessage = "Activation limit reached: \(details)"
@@ -162,7 +170,9 @@ class LicenseViewModel: ObservableObject {
 
             licenseState = .licensed
             validationMessage = "License activated successfully!"
-            NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+            }
         } catch {
             validationMessage = error.localizedDescription
         }
@@ -183,7 +193,9 @@ class LicenseViewModel: ObservableObject {
         licenseKey = ""
         validationMessage = nil
         activationsLimit = 0
-        NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .licenseStatusChanged, object: nil)
+        }
         loadLicenseState()
     }
 }

@@ -134,10 +134,27 @@ struct TranscriptionHistoryView: View {
         .onChange(of: latestTranscriptionIndicator.first?.id) { oldId, newId in
             guard isViewCurrentlyVisible else { return }
             if newId != oldId {
+                print("🔄 TranscriptionHistory: New transcription detected, reloading...")
                 Task {
                     await resetPagination()
                     await loadInitialContent()
                 }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .transcriptionCreated)) { _ in
+            guard isViewCurrentlyVisible else { return }
+            print("🔄 TranscriptionHistory: .transcriptionCreated received, reloading...")
+            Task {
+                await resetPagination()
+                await loadInitialContent()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .transcriptionCompleted)) { _ in
+            guard isViewCurrentlyVisible else { return }
+            print("🔄 TranscriptionHistory: .transcriptionCompleted received, reloading...")
+            Task {
+                await resetPagination()
+                await loadInitialContent()
             }
         }
     }
@@ -325,11 +342,12 @@ struct TranscriptionHistoryView: View {
         do {
             lastTimestamp = nil
             let items = try modelContext.fetch(cursorQueryDescriptor())
+            print("🔄 TranscriptionHistory: Fetched \(items.count) items")
             displayedTranscriptions = items
             lastTimestamp = items.last?.timestamp
             hasMoreContent = items.count == pageSize
         } catch {
-            print("Error loading transcriptions: \(error)")
+            print("❌ TranscriptionHistory: Error loading transcriptions: \(error)")
         }
     }
 

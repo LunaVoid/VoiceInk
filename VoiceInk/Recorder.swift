@@ -18,6 +18,7 @@ class Recorder: NSObject, ObservableObject {
     private var audioMeterUpdateTask: Task<Void, Never>?
     private var audioRestorationTask: Task<Void, Never>?
     private var hasDetectedAudioInCurrentSession = false
+    private var recordingStartTime: Date?
     
     enum RecorderError: Error {
         case couldNotStartRecording
@@ -52,6 +53,13 @@ class Recorder: NSObject, ObservableObject {
     private func handleDeviceChange() async {
         guard !isReconfiguring else { return }
         guard recorder != nil else { return }
+        
+        // Ignore device changes during the first 1.5 seconds of recording to avoid "instant stop" bug 
+        // caused by system audio reconfiguration on startup.
+        if let startTime = recordingStartTime, Date().timeIntervalSince(startTime) < 1.5 {
+            logger.notice("🔊 Ignoring device change during startup grace period")
+            return
+        }
 
         isReconfiguring = true
 
@@ -120,6 +128,7 @@ class Recorder: NSObject, ObservableObject {
         UserDefaults.standard.set(String(currentDeviceID), forKey: "lastUsedMicrophoneDeviceID")
         
         hasDetectedAudioInCurrentSession = false
+        recordingStartTime = Date()
 
         let deviceID = deviceManager.getCurrentDevice()
 

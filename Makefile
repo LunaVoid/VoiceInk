@@ -1,9 +1,8 @@
-# Define a directory for dependencies in the user's home folder
-DEPS_DIR := $(HOME)/VoiceInk-Dependencies
+DEPS_DIR := /Users/joshfix/Documents/GitHub/VoiceInk-Dependencies
 WHISPER_CPP_DIR := $(DEPS_DIR)/whisper.cpp
 FRAMEWORK_PATH := $(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
 
-.PHONY: all clean whisper setup build check healthcheck help dev run
+.PHONY: all clean whisper setup build check healthcheck help dev run install
 
 # Default target
 all: check build
@@ -41,7 +40,19 @@ setup: whisper
 	@echo "Please ensure your Xcode project references the framework from this new location."
 
 build: setup
-	xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Debug CODE_SIGN_IDENTITY="" build
+	xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release CODE_SIGN_IDENTITY="" build
+
+install: build
+	@echo "Installing VoiceInk to /Applications..."
+	@APP_PATH=$$(find "$$HOME/Library/Developer/Xcode/DerivedData" -name "VoiceInk.app" -type d | grep "Release" | head -1) && \
+	if [ -n "$$APP_PATH" ]; then \
+		echo "Found Release app at: $$APP_PATH"; \
+		cp -R "$$APP_PATH" /Applications/; \
+		echo "VoiceInk successfully installed to /Applications!"; \
+	else \
+		echo "Release build not found. Please run 'make build' first."; \
+		exit 1; \
+	fi
 
 # Run application
 run:

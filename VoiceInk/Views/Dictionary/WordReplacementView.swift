@@ -1,9 +1,7 @@
 import SwiftUI
 import SwiftData
 
-extension String: Identifiable {
-    public var id: String { self }
-}
+
 
 enum SortMode: String {
     case originalAsc = "originalAsc"

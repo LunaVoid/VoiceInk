@@ -3,8 +3,8 @@ import KeyboardShortcuts
 import AppKit
 
 extension KeyboardShortcuts.Name {
-    static let escapeRecorder = Self("escapeRecorder")
     static let cancelRecorder = Self("cancelRecorder")
+    static let escapeRecorder = Self("escapeRecorder")
     static let toggleEnhancement = Self("toggleEnhancement")
     // AI Prompt selection shortcuts
     static let selectPrompt1 = Self("selectPrompt1")
@@ -54,8 +54,9 @@ class MiniRecorderShortcutManager: ObservableObject {
     }
     
     @objc private func settingsDidChange() {
-        Task {
-            if await whisperState.isMiniRecorderVisible {
+        Task { [weak self] in
+            guard let self = self else { return }
+            if self.whisperState.isMiniRecorderVisible {
                 if EnhancementShortcutSettings.shared.isToggleEnhancementShortcutEnabled {
                     KeyboardShortcuts.setShortcut(.init(.e, modifiers: .command), for: .toggleEnhancement)
                 } else {
@@ -72,8 +73,9 @@ class MiniRecorderShortcutManager: ObservableObject {
     }
 
     private func setupVisibilityObserver() {
-        visibilityTask = Task { @MainActor in
-            for await isVisible in whisperState.$isMiniRecorderVisible.values {
+        visibilityTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            for await isVisible in self.whisperState.$isMiniRecorderVisible.values {
                 if isVisible {
                     activateEscapeShortcut()
                     activateCancelShortcut()
@@ -109,7 +111,7 @@ class MiniRecorderShortcutManager: ObservableObject {
         KeyboardShortcuts.onKeyDown(for: .escapeRecorder) { [weak self] in
             Task { @MainActor in
                 guard let self = self,
-                      await self.whisperState.isMiniRecorderVisible else { return }
+                      self.whisperState.isMiniRecorderVisible else { return }
                 
                 // Don't process if custom shortcut is configured
                 guard KeyboardShortcuts.getShortcut(for: .cancelRecorder) == nil else { return }
@@ -152,7 +154,7 @@ class MiniRecorderShortcutManager: ObservableObject {
         KeyboardShortcuts.onKeyDown(for: .cancelRecorder) { [weak self] in
             Task { @MainActor in
                 guard let self = self,
-                      await self.whisperState.isMiniRecorderVisible,
+                      self.whisperState.isMiniRecorderVisible,
                       KeyboardShortcuts.getShortcut(for: .cancelRecorder) != nil else { return }
 
                 await self.whisperState.cancelRecording()
@@ -179,8 +181,8 @@ class MiniRecorderShortcutManager: ObservableObject {
         KeyboardShortcuts.onKeyDown(for: .toggleEnhancement) { [weak self] in
             Task { @MainActor in
                 guard let self = self,
-                      await self.whisperState.isMiniRecorderVisible,
-                      let enhancementService = await self.whisperState.getEnhancementService() else { return }
+                      self.whisperState.isMiniRecorderVisible,
+                      let enhancementService = self.whisperState.getEnhancementService() else { return }
                 enhancementService.isEnhancementEnabled.toggle()
             }
         }
@@ -215,7 +217,7 @@ class MiniRecorderShortcutManager: ObservableObject {
         KeyboardShortcuts.onKeyDown(for: shortcutName) { [weak self] in
             Task { @MainActor in
                 guard let self = self,
-                      await self.whisperState.isMiniRecorderVisible else { return }
+                      self.whisperState.isMiniRecorderVisible else { return }
                 
                 let powerModeManager = PowerModeManager.shared
                 
@@ -273,9 +275,9 @@ class MiniRecorderShortcutManager: ObservableObject {
         KeyboardShortcuts.onKeyDown(for: shortcutName) { [weak self] in
             Task { @MainActor in
                 guard let self = self,
-                      await self.whisperState.isMiniRecorderVisible else { return }
+                      self.whisperState.isMiniRecorderVisible else { return }
                 
-                guard let enhancementService = await self.whisperState.getEnhancementService() else { return }
+                guard let enhancementService = self.whisperState.getEnhancementService() else { return }
                 
                 let availablePrompts = enhancementService.allPrompts
                 if index < availablePrompts.count {

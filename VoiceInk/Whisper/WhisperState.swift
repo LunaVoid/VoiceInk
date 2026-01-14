@@ -140,8 +140,10 @@ class WhisperState: NSObject, ObservableObject {
     
     func toggleRecord(powerModeId: UUID? = nil) async {
         if recordingState == .recording {
+            logger.notice("🔊 Stopping recording...")
             await recorder.stopRecording()
             if let recordedFile {
+                logger.notice("🔊 Recorded file: \(recordedFile.path)")
                 if !shouldCancelRecording {
                     let audioAsset = AVURLAsset(url: recordedFile)
                     let duration = (try? CMTimeGetSeconds(await audioAsset.load(.duration))) ?? 0.0
@@ -153,7 +155,12 @@ class WhisperState: NSObject, ObservableObject {
                         transcriptionStatus: .pending
                     )
                     modelContext.insert(transcription)
-                    try? modelContext.save()
+                    do {
+                        try modelContext.save()
+                        logger.notice("💾 Initial transcription saved. ID: \(transcription.id)")
+                    } catch {
+                        logger.error("❌ Failed to save initial transcription: \(error.localizedDescription)")
+                    }
                     NotificationCenter.default.post(name: .transcriptionCreated, object: transcription)
 
                     await transcribeAudio(on: transcription)
@@ -246,8 +253,9 @@ class WhisperState: NSObject, ObservableObject {
     }
     
     private func transcribeAudio(on transcription: Transcription) async {
+        logger.notice("🔄 transcribeAudio called for transcription ID: \(transcription.id)")
         guard let urlString = transcription.audioFileURL, let url = URL(string: urlString) else {
-            logger.error("❌ Invalid audio file URL in transcription object.")
+            logger.error("❌ Invalid audio file URL in transcription object: \(transcription.audioFileURL ?? "nil")")
             await MainActor.run {
                 recordingState = .idle
             }
@@ -258,6 +266,7 @@ class WhisperState: NSObject, ObservableObject {
         }
 
         if shouldCancelRecording {
+            logger.notice("🚫 Transcription cancelled before starting (shouldCancelRecording = true)")
             await MainActor.run {
                 recordingState = .idle
             }
@@ -376,15 +385,25 @@ class WhisperState: NSObject, ObservableObject {
         }
 
         // --- Finalize and save ---
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            logger.notice("💾 Final transcription saved successfully. ID: \(transcription.id), Text length: \(transcription.text.count)")
+        } catch {
+            logger.error("❌ Failed to save final transcription: \(error.localizedDescription)")
+        }
         
         if transcription.transcriptionStatus == TranscriptionStatus.completed.rawValue {
+            logger.notice("📣 Posting .transcriptionCompleted notification for ID: \(transcription.id)")
             NotificationCenter.default.post(name: .transcriptionCompleted, object: transcription)
         }
 
-        if await checkCancellationAndCleanup() { return }
+        if await checkCancellationAndCleanup() { 
+             logger.notice("🚫 Transcription cancelled during finalization")
+             return 
+        }
 
         if var textToPaste = finalPastedText, transcription.transcriptionStatus == TranscriptionStatus.completed.rawValue {
+            logger.notice("📋 Preparing to paste text: \(textToPaste.prefix(50))...")
             if case .trialExpired = licenseViewModel.licenseState {
                 textToPaste = """
                     Your trial has expired. Upgrade to VoiceInk Pro at tryvoiceink.com/buy
@@ -393,16 +412,22 @@ class WhisperState: NSObject, ObservableObject {
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.logger.notice("🎹 Pasting at cursor...")
                 CursorPaster.pasteAtCursor(textToPaste + " ")
 
                 let powerMode = PowerModeManager.shared
                 if let activeConfig = powerMode.currentActiveConfiguration, activeConfig.isAutoSendEnabled {
                     // Slight delay to ensure the paste operation completes
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        self.logger.notice("⌨️ Sending Enter key (AutoSend)...")
                         CursorPaster.pressEnter()
                     }
                 }
             }
+        } else {
+            let hasText = finalPastedText != nil ? "present" : "nil"
+            let status = transcription.transcriptionStatus ?? "unknown"
+            logger.warning("📋 Skipping paste: finalPastedText is \(hasText), status is \(status)")
         }
 
         if let result = promptDetectionResult,

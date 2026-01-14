@@ -131,7 +131,10 @@ extension WhisperState {
     }
     
     @objc func handleLicenseStatusChanged() {
-        self.licenseViewModel = LicenseViewModel()
+        // Break infinite recursion: Do NOT create a new LicenseViewModel here.
+        // The LicenseViewModel already updates its own @Published properties,
+        // and WhisperState just needs to ensure its instance stays in sync if multiple instances exist.
+        self.licenseViewModel.loadLicenseState()
     }
     
     @objc func handlePromptChange() {

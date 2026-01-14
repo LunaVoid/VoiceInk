@@ -13,6 +13,13 @@ class TranscriptionAutoCleanupService {
 
     private let defaultRetentionMinutes: Int = 24 * 60
 
+    private var retentionMinutesState: Int {
+        if UserDefaults.standard.object(forKey: keyRetentionMinutes) == nil {
+            return defaultRetentionMinutes
+        }
+        return UserDefaults.standard.integer(forKey: keyRetentionMinutes)
+    }
+
     private init() {}
 
     func startMonitoring(modelContext: ModelContext) {
@@ -46,24 +53,24 @@ class TranscriptionAutoCleanupService {
         let isEnabled = UserDefaults.standard.bool(forKey: keyIsEnabled)
         guard isEnabled else { return }
 
-        let minutes = UserDefaults.standard.integer(forKey: keyRetentionMinutes)
-        if minutes > 0 {
-            // Trigger a sweep based on the retention window
-            if let modelContext = self.modelContext {
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    await self.sweepOldTranscriptions(modelContext: modelContext)
-                }
-            }
-            return
-        }
-
         guard let transcription = notification.object as? Transcription,
               let modelContext = self.modelContext else {
             logger.error("Invalid transcription or missing model context")
             return
         }
 
+        let minutes = self.retentionMinutesState
+        
+        if minutes > 0 {
+            print("🚮 TranscriptionAutoCleanupService: Scheduling deletion for \(transcription.id) in \(minutes) minutes")
+            Task { [weak self] in
+                guard let self = self else { return }
+                await self.sweepOldTranscriptions(modelContext: modelContext)
+            }
+            return
+        }
+
+        print("🚮 TranscriptionAutoCleanupService: DELETING TRANSCRIPTION IMMEDIATELY for \(transcription.id) (Retention is 0)")
         if let urlString = transcription.audioFileURL,
            let url = URL(string: urlString) {
             do {
@@ -87,7 +94,7 @@ class TranscriptionAutoCleanupService {
             return
         }
 
-        let retentionMinutes = UserDefaults.standard.integer(forKey: keyRetentionMinutes)
+        let retentionMinutes = self.retentionMinutesState
         let effectiveMinutes = max(retentionMinutes, 0)
 
         let cutoffDate = Date().addingTimeInterval(TimeInterval(-effectiveMinutes * 60))

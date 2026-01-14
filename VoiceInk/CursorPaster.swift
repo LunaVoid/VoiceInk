@@ -4,6 +4,16 @@ import AppKit
 class CursorPaster {
 
     static func pasteAtCursor(_ text: String) {
+        let isTrusted = AXIsProcessTrusted()
+        print("🎹 CursorPaster: pasteAtCursor requested. Trusted: \(isTrusted)")
+        if !isTrusted {
+            print("⚠️ WARNING: VoiceInk lacks Accessibility permissions. Pasting will NOT work.")
+            print("⚠️ Please go to System Settings > Privacy & Security > Accessibility and enable VoiceInk.")
+        }
+        
+        if let activeApp = NSWorkspace.shared.frontmostApplication {
+            print("🎹 CursorPaster: Active application is \(activeApp.localizedName ?? "Unknown") (\(activeApp.bundleIdentifier ?? "no bundle ID"))")
+        }
         let pasteboard = NSPasteboard.general
         // Default to true if not explicitly set by user
         let shouldRestoreClipboard = UserDefaults.standard.object(forKey: "restoreClipboardAfterPaste") as? Bool ?? true
@@ -26,8 +36,10 @@ class CursorPaster {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             if UserDefaults.standard.bool(forKey: "UseAppleScriptPaste") {
+                print("🎹 CursorPaster: Using AppleScript method")
                 _ = pasteUsingAppleScript()
             } else {
+                print("🎹 CursorPaster: Using CGEvent command+v method")
                 pasteUsingCommandV()
             }
         }
@@ -48,7 +60,8 @@ class CursorPaster {
     }
     
     private static func pasteUsingAppleScript() -> Bool {
-        guard AXIsProcessTrusted() else {
+        if !AXIsProcessTrusted() {
+            print("🎹 CursorPaster: AppleScript paste FAILED - Not trusted")
             return false
         }
         
@@ -67,7 +80,8 @@ class CursorPaster {
     }
     
     private static func pasteUsingCommandV() {
-        guard AXIsProcessTrusted() else {
+        if !AXIsProcessTrusted() {
+            print("🎹 CursorPaster: CGEvent paste FAILED - Not trusted")
             return
         }
         

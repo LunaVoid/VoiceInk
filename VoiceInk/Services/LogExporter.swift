@@ -22,7 +22,7 @@ final class LogExporter {
         sessionStartDates = Array(sessionStartDates.prefix(maxSessionsToKeep))
         saveSessions()
 
-        logger.notice("🎙️ LogExporter initialized, \(self.sessionStartDates.count) session(s) tracked")
+        logger.notice("🎙️ LogExporter initialized, \(self.sessionStartDates.count, privacy: .public) session(s) tracked")
     }
 
     private func saveSessions() {
@@ -37,11 +37,15 @@ final class LogExporter {
         let logs = try await fetchLogs()
         let fileURL = try saveLogsToFile(logs)
 
-        logger.notice("🎙️ Log export completed: \(fileURL.path)")
+        logger.notice("🎙️ Log export completed: \(fileURL.path, privacy: .public)")
         return fileURL
     }
 
     private func fetchLogs() async throws -> [String] {
+        let systemInfo = await MainActor.run {
+            SystemInfoService.shared.getSystemInfoString()
+        }
+
         let store = try OSLogStore(scope: .system)
         let predicate = NSPredicate(format: "subsystem == %@", subsystem)
 
@@ -54,6 +58,8 @@ final class LogExporter {
         logLines.append("Subsystem: \(subsystem)")
         logLines.append("Total Sessions: \(sessionStartDates.count)")
         logLines.append("================================")
+        logLines.append("")
+        logLines.append(systemInfo)
         logLines.append("")
 
         // Build session ranges with labels

@@ -3,21 +3,24 @@
     <channel>
         <title>VoiceInk</title>
         <item>
-            <title>1.69</title>
-            <pubDate>Sun, 12 Jan 2026 12:00:00 +0545</pubDate>
-            <sparkle:version>169</sparkle:version>
-            <sparkle:shortVersionString>1.69</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <title>1.76</title>
             <description><![CDATA[
-
-                <h3>What's New in Version 1.69</h3>
+                <h3>What's New in v1.76</h3>
                 <ul>
-                    <li>Fix recording Issue</li>
-                    <li>Added export logs option in settings</li>
+                    <li>🦜 Updated Parakeet model (delete and re-download the model)</li>
+                    <li>☁️ Added AssemblyAI and Cartesia transcription models</li>
+                    <li>📝 Added transcription formatting controls</li>
+                    <li>📊 Stats are now stored separately from transcript history</li>
+                    <li>🎙️ Improved recording startup reliability</li>
+                    <li>🍎 Fixed Apple Speech issue</li>
+                    <li>🐛 Minor fixes and improvements</li>
                 </ul>
-
             ]]></description>
-            <enclosure url="https://github.com/Beingpax/VoiceInk/releases/download/v1.69/VoiceInk.dmg" length="10786047" type="application/octet-stream" sparkle:edSignature="tPVfTDY+CKBMxW5EW+KsbhsH5YiVDyY9VFplI71EiDu56GZu0fWxd/p/V2WRdPHX+8FKfVpmSJwhzVgCHL7FBg=="/>
+            <pubDate>Thu, 07 May 2026 22:22:54 +0545</pubDate>
+            <sparkle:version>176</sparkle:version>
+            <sparkle:shortVersionString>1.76</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.4</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/Beingpax/VoiceInk/releases/download/v1.76/VoiceInk.dmg" length="14248109" type="application/octet-stream" sparkle:edSignature="VIHBaVue5hfpx8nQsB0VS3tliha3Dx8B/MWZ5vRNWNNufmjh3P86VRKt/vH1sVfV37g7I84TVpuTaPc0YRAxCw=="/>
         </item>
     </channel>
 </rss>

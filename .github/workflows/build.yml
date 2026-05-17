@@ -1,6 +1,6 @@
 name: Build VoiceInk
 on:
-  workflow_dispatch:
+  push:
 jobs:
   build:
     runs-on: macos-15

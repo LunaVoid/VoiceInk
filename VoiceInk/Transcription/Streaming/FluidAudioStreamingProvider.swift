@@ -11,8 +11,11 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
 
     private(set) var transcriptionEvents: AsyncStream<StreamingTranscriptionEvent>
 
-    private let audioBuffer = AudioBuffer()
+    private var audioBuffer: [Float] = []
+    private let bufferLock = NSLock()
     private let sampleRate: Double = 16000.0
+    // Samples trimmed from buffer front; subtract from absolute indices for buffer-relative access.
+    private var trimmedSampleCount: Int = 0
 
     private var asrManager: AsrManager?
     private var decoderLayerCount: Int = 0
@@ -49,7 +52,8 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
         self.decoderLayerCount = await manager.decoderLayerCount
 
         agreementEngine.reset()
-        await audioBuffer.reset()
+        audioBuffer = []
+        trimmedSampleCount = 0
         lastTranscribedSampleCount = 0
 
         startTranscriptionLoop()
@@ -60,7 +64,9 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
 
     func sendAudioChunk(_ data: Data) async throws {
         let samples = Self.convertToFloat32(data)
-        await audioBuffer.append(samples)
+        bufferLock.lock()
+        audioBuffer.append(contentsOf: samples)
+        bufferLock.unlock()
     }
 
     func commit() async throws {
@@ -82,7 +88,10 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
         asrManager = nil
         decoderLayerCount = 0
 
-        await audioBuffer.reset()
+        bufferLock.lock()
+        audioBuffer = []
+        trimmedSampleCount = 0
+        bufferLock.unlock()
         agreementEngine.reset()
 
         eventsContinuation?.finish()
@@ -111,7 +120,9 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
         guard !isTranscribing else { return }
         guard let asrManager else { return }
 
-        let absoluteSampleCount = await audioBuffer.absoluteSampleCount
+        bufferLock.lock()
+        let absoluteSampleCount = trimmedSampleCount + audioBuffer.count
+        bufferLock.unlock()
 
         guard absoluteSampleCount - lastTranscribedSampleCount >= minNewSamples else { return }
         guard absoluteSampleCount >= Int(sampleRate) else { return }
@@ -125,7 +136,15 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
             : agreementEngine.confirmedEndTime
         let seekSample = max(0, Int(seekTime * sampleRate))
 
-        guard let audioSlice = await audioBuffer.slice(from: seekSample) else { return }
+        bufferLock.lock()
+        let bufferRelativeSeek = max(0, seekSample - trimmedSampleCount)
+        let sliceEnd = audioBuffer.count
+        guard bufferRelativeSeek < sliceEnd else {
+            bufferLock.unlock()
+            return
+        }
+        var audioSlice = Array(audioBuffer[bufferRelativeSeek..<sliceEnd])
+        bufferLock.unlock()
 
         // Pad with 1s trailing silence for punctuation capture
         let maxSingleChunkSamples = 240_000
@@ -166,7 +185,14 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
             let newHypothesisStartTime = agreementEngine.hypothesisStartTime
             if newHypothesisStartTime > 0 {
                 let safeTrimPoint = max(0, Int(newHypothesisStartTime * sampleRate))
-                await audioBuffer.trim(upTo: safeTrimPoint)
+                let samplesToTrim = safeTrimPoint - trimmedSampleCount
+                if samplesToTrim > 0 {
+                    bufferLock.lock()
+                    let actualTrim = min(samplesToTrim, audioBuffer.count)
+                    audioBuffer.removeFirst(actualTrim)
+                    trimmedSampleCount += actualTrim
+                    bufferLock.unlock()
+                }
             }
 
         } catch {
@@ -184,7 +210,14 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
             : agreementEngine.confirmedEndTime
         let seekSample = max(0, Int(seekTime * sampleRate))
 
-        guard let samples = await audioBuffer.slice(from: seekSample) else { return nil }
+        bufferLock.lock()
+        let bufferRelativeSeek = max(0, seekSample - trimmedSampleCount)
+        guard bufferRelativeSeek < audioBuffer.count else {
+            bufferLock.unlock()
+            return nil
+        }
+        var samples = Array(audioBuffer[bufferRelativeSeek...])
+        bufferLock.unlock()
 
         guard samples.count >= Int(sampleRate) else { return nil }
 
@@ -218,42 +251,5 @@ final class FluidAudioStreamingProvider: StreamingTranscriptionProvider {
             }
         }
         return samples
-    }
-}
-
-// MARK: - AudioBuffer actor
-
-/// Actor that owns the audio sample buffer and trimmed-sample-count state,
-/// providing async-safe access required by Swift 6 strict concurrency.
-private actor AudioBuffer {
-    private var buffer: [Float] = []
-    /// Number of samples removed from the front of `buffer` since the start of the session.
-    private var trimmedSampleCount: Int = 0
-
-    /// Total number of samples ever appended (trimmed + current buffer length).
-    var absoluteSampleCount: Int { trimmedSampleCount + buffer.count }
-
-    func append(_ samples: [Float]) {
-        buffer.append(contentsOf: samples)
-    }
-
-    func reset() {
-        buffer = []
-        trimmedSampleCount = 0
-    }
-
-    /// Returns the slice of the buffer starting at `absoluteSample`, or nil if out of range.
-    func slice(from absoluteSample: Int) -> [Float]? {
-        let relative = max(0, absoluteSample - trimmedSampleCount)
-        guard relative < buffer.count else { return nil }
-        return Array(buffer[relative...])
-    }
-
-    func trim(upTo absoluteSample: Int) {
-        let samplesToTrim = absoluteSample - trimmedSampleCount
-        guard samplesToTrim > 0 else { return }
-        let actualTrim = min(samplesToTrim, buffer.count)
-        buffer.removeFirst(actualTrim)
-        trimmedSampleCount += actualTrim
     }
 }

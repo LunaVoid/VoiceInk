@@ -19,7 +19,9 @@ class Recorder: NSObject, ObservableObject {
     private let audioSetupQueue = DispatchQueue(label: "com.prakashjoshipax.voiceink.audioSetup", qos: .userInitiated)
     private var audioMuteTask: Task<Void, Never>?
     private var audioRestorationTask: Task<Void, Never>?
-    private var smoothedValues = OSAllocatedUnfairLock(initialState: (average: Float(0), peak: Float(0)))
+    private let smoothedValuesLock = NSLock()
+    private var smoothedAverage: Float = 0
+    private var smoothedPeak: Float = 0
 
     /// Audio chunk callback for streaming. Can be updated while recording;
     /// changes are forwarded to the live CoreAudioRecorder.
@@ -171,7 +173,10 @@ class Recorder: NSObject, ObservableObject {
             }
         }
 
-        smoothedValues.withLock { $0 = (average: 0, peak: 0) }
+        smoothedValuesLock.lock()
+        smoothedAverage = 0
+        smoothedPeak = 0
+        smoothedValuesLock.unlock()
 
         audioMeter = AudioMeter(averagePower: 0, peakPower: 0)
 
@@ -237,11 +242,11 @@ class Recorder: NSObject, ObservableObject {
         }
 
         // Apply EMA smoothing with thread-safe access
-        let newAudioMeter = smoothedValues.withLock { state -> AudioMeter in
-            state.average = state.average * 0.6 + normalizedAverage * 0.4
-            state.peak    = state.peak    * 0.6 + normalizedPeak    * 0.4
-            return AudioMeter(averagePower: Double(state.average), peakPower: Double(state.peak))
-        }
+        smoothedValuesLock.lock()
+        smoothedAverage = smoothedAverage * 0.6 + normalizedAverage * 0.4
+        smoothedPeak = smoothedPeak * 0.6 + normalizedPeak * 0.4
+        let newAudioMeter = AudioMeter(averagePower: Double(smoothedAverage), peakPower: Double(smoothedPeak))
+        smoothedValuesLock.unlock()
 
         // Dispatch to main queue for UI updates (more efficient than Task)
         DispatchQueue.main.async { [weak self] in

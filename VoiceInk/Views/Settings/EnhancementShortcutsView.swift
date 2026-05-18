@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct EnhancementShortcutsView: View {
-    @AppStorage("isSwitchPromptShortcutEnabled") private var isSwitchPromptShortcutEnabled = true
-
     var body: some View {
         VStack(spacing: 8) {
             // Toggle AI Enhancement
@@ -43,7 +41,7 @@ struct EnhancementShortcutsView: View {
                         KeyChip(label: "1 – 0")
                     }
 
-                    Toggle("", isOn: $isSwitchPromptShortcutEnabled)
+                    Toggle("", isOn: $shortcutSettings.isSwitchPromptShortcutEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
                 }

@@ -27,34 +27,39 @@ private final class AudioChunkSource: @unchecked Sendable {
 }
 
 private final class StreamingMetrics: @unchecked Sendable {
-    private struct Counts {
-        var receivedChunks = 0
-        var receivedBytes = 0
-        var sentChunks = 0
-        var sentBytes = 0
-    }
-    private var counts = OSAllocatedUnfairLock(initialState: Counts())
+    private let lock = NSLock()
+    private var receivedChunks = 0
+    private var receivedBytes = 0
+    private var sentChunks = 0
+    private var sentBytes = 0
 
     func reset() {
-        counts.withLock { $0 = Counts() }
+        lock.lock()
+        receivedChunks = 0
+        receivedBytes = 0
+        sentChunks = 0
+        sentBytes = 0
+        lock.unlock()
     }
 
     func recordReceived(_ byteCount: Int) {
-        counts.withLock {
-            $0.receivedChunks += 1
-            $0.receivedBytes += byteCount
-        }
+        lock.lock()
+        receivedChunks += 1
+        receivedBytes += byteCount
+        lock.unlock()
     }
 
     func recordSent(_ byteCount: Int) {
-        counts.withLock {
-            $0.sentChunks += 1
-            $0.sentBytes += byteCount
-        }
+        lock.lock()
+        sentChunks += 1
+        sentBytes += byteCount
+        lock.unlock()
     }
 
     func snapshot() -> (receivedChunks: Int, receivedBytes: Int, sentChunks: Int, sentBytes: Int) {
-        counts.withLock { ($0.receivedChunks, $0.receivedBytes, $0.sentChunks, $0.sentBytes) }
+        lock.lock()
+        defer { lock.unlock() }
+        return (receivedChunks, receivedBytes, sentChunks, sentBytes)
     }
 }
 

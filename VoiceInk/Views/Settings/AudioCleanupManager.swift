@@ -2,7 +2,6 @@ import Foundation
 import SwiftData
 
 /// A utility class that manages automatic cleanup of audio files while preserving transcript data
-@MainActor
 class AudioCleanupManager {
     static let shared = AudioCleanupManager()
 

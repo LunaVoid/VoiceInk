@@ -33,6 +33,7 @@ jobs:
             MACOSX_DEPLOYMENT_TARGET=14.0 \
             SWIFT_ACTIVE_COMPILATION_CONDITIONS='SWIFT_PACKAGE Xcode' \
             ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
+            SWIFT_STRICT_CONCURRENCY=minimal \
             -derivedDataPath build
       - name: Upload artifact
         uses: actions/upload-artifact@v4
